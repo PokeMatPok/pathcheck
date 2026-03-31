@@ -1,3 +1,4 @@
+![Pathcheck banner](/pathcheck.png)
 # Pathcheck: simple windows PATH utility
 Pathcheck gives you easy access to the PATH state from your command line, it allows you to run commands from path even if they aren't loaded in your current session.
 

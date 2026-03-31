@@ -32,8 +32,9 @@ func searchPath(needle string) ([]string, []string, error) {
 	sysMatches := []string{}
 	userMatches := []string{}
 	for _, entry := range systemPathEntries {
-		// Check if the entry is in the user PATH
-		fullPath := path.Join(entry, needle+".exe")
+		// Expand environment variables before checking
+		expandedEntry := expandPath(entry)
+		fullPath := path.Join(expandedEntry, needle+".exe")
 		_, err := os.Stat(fullPath)
 		if err == nil {
 			sysMatches = append(sysMatches, entry)
@@ -41,8 +42,9 @@ func searchPath(needle string) ([]string, []string, error) {
 	}
 
 	for _, entry := range userPathEntries {
-		// Check if the entry is in the user PATH
-		fullPath := path.Join(entry, needle+".exe")
+		// Expand environment variables before checking
+		expandedEntry := expandPath(entry)
+		fullPath := path.Join(expandedEntry, needle+".exe")
 		_, err := os.Stat(fullPath)
 		if err == nil {
 			userMatches = append(userMatches, entry)
@@ -51,14 +53,25 @@ func searchPath(needle string) ([]string, []string, error) {
 	return sysMatches, userMatches, nil
 }
 
+func normalizePath(p string) string {
+	// Trim spaces and trailing slashes/backslashes
+	p = strings.TrimSpace(p)
+	p = strings.TrimRight(p, "\\/")
+	return strings.ToLower(p)
+}
+
 func difference(a, b []string) []string {
 	lookup := make(map[string]bool)
 	for _, entry := range b {
-		lookup[strings.ToLower(entry)] = true
+		normalized := normalizePath(entry)
+		if normalized != "" {
+			lookup[normalized] = true
+		}
 	}
 	result := []string{}
 	for _, entry := range a {
-		if !lookup[strings.ToLower(entry)] {
+		normalized := normalizePath(entry)
+		if normalized != "" && !lookup[normalized] {
 			result = append(result, entry)
 		}
 	}
@@ -74,11 +87,13 @@ func help() {
 	println(Red + "  cast" + Reset + "    - Run a command from the PATH")
 	println(Red + "  diff" + Reset + "    - Compare system and user PATH variables")
 	println(Red + "  unique" + Reset + "  - Show unique entries in PATH in machine readable format separated by newlines")
-	println(Red + "  install" + Reset + " - Install path")
-	println(Red + "  uninstall" + Reset + " - Uninstall path")
+	/*
+		println(Red + "  install" + Reset + " - Install path")
+		println(Red + "  uninstall" + Reset + " - Uninstall path")
 
-	println(Green + "Args:" + Reset)
-	println(Green + "  <program> <passed_args>" + Reset)
+		println(Green + "Args:" + Reset)
+		println(Green + "  <program> <passed_args>" + Reset)
+	*/
 	os.Exit(0)
 }
 
@@ -117,13 +132,15 @@ func audit() {
 	invalidPaths := make([]string, 0)
 
 	for _, entry := range systemPathEntries {
-		if _, err := os.Stat(entry); err != nil {
+		expandedEntry := expandPath(entry)
+		if _, err := os.Stat(expandedEntry); err != nil {
 			invalidPaths = append(invalidPaths, entry+" (System)")
 		}
 	}
 
 	for _, entry := range userPathEntries {
-		if _, err := os.Stat(entry); err != nil {
+		expandedEntry := expandPath(entry)
+		if _, err := os.Stat(expandedEntry); err != nil {
 			invalidPaths = append(invalidPaths, entry+" (User)")
 		}
 	}
@@ -144,21 +161,23 @@ func audit() {
 	potentialHijacks := make([]string, 0)
 
 	for _, entry := range userPathEntries {
-		if strings.EqualFold(entry, "C:\\Windows\\System32") {
+		expandedEntry := expandPath(entry)
+		if strings.EqualFold(expandedEntry, "C:\\Windows\\System32") {
 			potentialHijacks = append(potentialHijacks, entry+" (C:\\Windows\\System32 in User PATH)")
 		}
 
-		if strings.EqualFold(entry, "C:\\Windows") {
+		if strings.EqualFold(expandedEntry, "C:\\Windows") {
 			potentialHijacks = append(potentialHijacks, entry+" (C:\\Windows in User PATH)")
 		}
 	}
 
 	for _, entry := range systemPathEntries {
-		if strings.EqualFold(entry, "C:\\Windows\\System32") {
+		expandedEntry := expandPath(entry)
+		if strings.EqualFold(expandedEntry, "C:\\Windows\\System32") {
 			potentialHijacks = append(potentialHijacks, entry+" (C:\\Windows\\System32 in System PATH)")
 		}
 
-		if strings.EqualFold(entry, "C:\\Windows") {
+		if strings.EqualFold(expandedEntry, "C:\\Windows") {
 			potentialHijacks = append(potentialHijacks, entry+" (C:\\Windows in System PATH)")
 		}
 	}
@@ -201,13 +220,15 @@ func which() {
 		if len(sysMatches) > 0 {
 			println(Yellow + "System PATH matches:" + Reset)
 			for _, match := range sysMatches {
-				println(White + "  " + match + Reset + Magenta + " → " + strings.Join(strings.Split(path.Join(match, os.Args[2]+".exe"), "/"), "\\") + Reset)
+				expandedMatch := expandPath(match)
+				println(White + "  " + match + Reset + Magenta + " → " + strings.Join(strings.Split(path.Join(expandedMatch, os.Args[2]+".exe"), "/"), "\\") + Reset)
 			}
 		}
 		if len(userMatches) > 0 {
 			println(Yellow + "User PATH matches:" + Reset)
 			for _, match := range userMatches {
-				println(White + "  " + match + Reset + Magenta + " → " + strings.Join(strings.Split(path.Join(match, os.Args[2]+".exe"), "/"), "\\") + Reset)
+				expandedMatch := expandPath(match)
+				println(White + "  " + match + Reset + Magenta + " → " + strings.Join(strings.Split(path.Join(expandedMatch, os.Args[2]+".exe"), "/"), "\\") + Reset)
 			}
 		}
 	} else {
@@ -255,7 +276,8 @@ func cast() {
 			match = userMatches[choice-1-len(sysMatches)]
 		}
 
-		match = strings.TrimSpace(match) + "\\" + os.Args[2] + ".exe"
+		expandedMatch := expandPath(match)
+		match = strings.TrimSpace(expandedMatch) + "\\" + os.Args[2] + ".exe"
 		println(Yellow + "running " + match + "..." + Reset)
 
 		proc := exec.Command(match, os.Args[3:]...)
@@ -266,9 +288,11 @@ func cast() {
 	} else {
 		if matchesCount == 1 {
 			match := strings.TrimSpace(strings.Join(sysMatches, "") + strings.Join(userMatches, ""))
-			println(Yellow + "running " + match + "..." + Reset)
+			expandedMatch := expandPath(match)
+			fullPath := expandedMatch + "\\" + os.Args[2] + ".exe"
+			println(Yellow + "running " + fullPath + "..." + Reset)
 
-			proc := exec.Command(match, os.Args[3:]...)
+			proc := exec.Command(fullPath, os.Args[3:]...)
 			proc.Stdout = os.Stdout
 			proc.Stderr = os.Stderr
 			proc.Stdin = os.Stdin
@@ -278,26 +302,36 @@ func cast() {
 }
 
 func diff() {
-	shellEntries := strings.Split(os.Getenv("PATH"), ";")
-	registryEntries := []string{}
+	// Get the current shell PATH (already expanded by the OS)
+	shellPath := os.Getenv("PATH")
+	shellEntries := strings.Split(shellPath, ";")
+
+	// Expand environment variables in registry entries for comparison
+	expandedRegistryEntries := []string{}
 	for _, entry := range append(systemPathEntries, userPathEntries...) {
-		registryEntries = append(registryEntries, os.ExpandEnv(entry))
+		expandedRegistryEntries = append(expandedRegistryEntries, expandPath(entry))
 	}
 
-	missingFromShell := difference(registryEntries, shellEntries)
-	missingFromRegistry := difference(shellEntries, registryEntries)
+	// Compare expanded versions
+	missingFromShell := difference(expandedRegistryEntries, shellEntries)
+	missingFromRegistry := difference(shellEntries, expandedRegistryEntries)
 
-	if len(missingFromShell) == 0 {
-		println(Green + "Shell PATH is up to date" + Reset)
-	} else {
-		println(Yellow + strconv.Itoa(len(missingFromShell)) + " entries in registry but missing from shell (stale):" + Reset)
+	if len(missingFromShell) == 0 && len(missingFromRegistry) == 0 {
+		println(Green + "Shell PATH is up to date with registry" + Reset)
+		return
+	}
+
+	if len(missingFromShell) > 0 {
+		println(Yellow + strconv.Itoa(len(missingFromShell)) + " entries in registry but missing from shell:" + Reset)
+		println(Blue + "  (Shell needs to be restarted to pick up these changes)" + Reset)
 		for _, entry := range missingFromShell {
 			println(Red + "  " + entry + Reset)
 		}
 	}
 
 	if len(missingFromRegistry) > 0 {
-		println(Yellow + strconv.Itoa(len(missingFromRegistry)) + " entries in shell but removed from registry:" + Reset)
+		println(Yellow + strconv.Itoa(len(missingFromRegistry)) + " entries in shell but not in registry:" + Reset)
+		println(Blue + "  (These were added dynamically to the current shell session)" + Reset)
 		for _, entry := range missingFromRegistry {
 			println(Red + "  " + entry + Reset)
 		}
@@ -330,12 +364,10 @@ func uninstall() {
 func init() {
 	key, _ := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, registry.QUERY_VALUE)
 	systemPath, _, _ = key.GetStringValue("PATH")
-	systemPath = expandPath(systemPath)
 	systemPathEntries = strings.Split(systemPath, ";")
 
 	key2, _ := registry.OpenKey(registry.CURRENT_USER, `Environment`, registry.QUERY_VALUE)
 	userPath, _, _ = key2.GetStringValue("PATH")
-	userPath = expandPath(userPath)
 	userPathEntries = strings.Split(userPath, ";")
 
 	/*
@@ -389,10 +421,12 @@ func main() {
 		diff()
 	case "unique":
 		unique()
-	case "install":
-		install()
-	case "uninstall":
-		uninstall()
+	/*
+		case "install":
+			install()
+		case "uninstall":
+			uninstall()
+	*/
 	default:
 		help()
 	}
