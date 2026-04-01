@@ -20,6 +20,11 @@ go build -o pathcheck.exe
 ```
 
 ## Usage
+Pathcheck is an CLI tool, an CLI tool can just be called via powershell or cmd. Please make sure you navigated to the folder where the executable lives and run it directly:
+```bash
+.\pathcheck.exe <command> [args]
+```
+or register it to path and run it globally:
 ```bash
 pathcheck <command> [args]
 ```
