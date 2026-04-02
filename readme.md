@@ -84,4 +84,4 @@ If you feel like something is missing either open an issue or fork it, make your
 
 ## License
 
-[Add your license here]
+MIT License
