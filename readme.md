@@ -29,6 +29,8 @@ Or register it to PATH and run it globally:
 pathcheck <command> [args]
 ```
 
+[Watch the demo video.](pathcheck_demo.mp4)
+
 ### Commands
 
 #### audit
